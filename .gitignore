@@ -1,0 +1,7 @@
+# Build output
+out/
+*.class
+
+# Optional local files
+accounts.json
+.DS_Store
