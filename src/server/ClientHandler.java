@@ -6,7 +6,6 @@ import vaultlink.common.ProtocolConstants;
 
 import java.io.*;
 import java.net.Socket;
-import java.util.Properties;
 
 /**
  * Per-client thread: full session lifecycle — key exchange, then transaction loop.
@@ -18,7 +17,7 @@ public class ClientHandler implements Runnable {
     private final Socket socket;
     private final AccountManager accountManager;
     private final AuditLogger auditLogger;
-    private final Properties serverKeys; // username -> K_pre hex
+    private final ServerKeyStore serverKeys;
     private final ServerGUICallback guiCallback;
 
     public interface ServerGUICallback {
@@ -28,7 +27,7 @@ public class ClientHandler implements Runnable {
     }
 
     public ClientHandler(Socket socket, AccountManager accountManager, AuditLogger auditLogger,
-                         Properties serverKeys, ServerGUICallback guiCallback) {
+                         ServerKeyStore serverKeys, ServerGUICallback guiCallback) {
         this.socket = socket;
         this.accountManager = accountManager;
         this.auditLogger = auditLogger;
@@ -47,7 +46,7 @@ public class ClientHandler implements Runnable {
             KeyExchangeServer.KeyExchangeMessage1 msg1 = KeyExchangeServer.readMessage1(in);
             String username = msg1.username;
             byte[] nClient = msg1.nClient;
-            String kPreHex = serverKeys.getProperty(username);
+            String kPreHex = serverKeys.getKpreHex(username);
             if (kPreHex == null || kPreHex.isEmpty()) {
                 if (guiCallback != null) guiCallback.log("Auth failed: unknown user " + username);
                 return;

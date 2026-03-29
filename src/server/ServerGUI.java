@@ -2,11 +2,11 @@ package vaultlink.server;
 
 import javax.swing.*;
 import java.awt.*;
+import java.io.File;
 import java.util.List;
-import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
- * Server GUI: scrollable log, active connections list, "View Audit Log" button.
+ * Server GUI: scrollable log, active connections list, register new account, "View Audit Log" button.
  */
 public class ServerGUI extends JFrame implements ClientHandler.ServerGUICallback {
 
@@ -15,10 +15,14 @@ public class ServerGUI extends JFrame implements ClientHandler.ServerGUICallback
     private final DefaultListModel<String> connectionsModel;
     private final AuditLogger auditLogger;
     private final AccountManager accountManager;
+    private final ServerKeyStore serverKeys;
+    private final File serverKeyFile;
 
-    public ServerGUI(AuditLogger auditLogger, AccountManager accountManager) {
+    public ServerGUI(AuditLogger auditLogger, AccountManager accountManager, ServerKeyStore serverKeys, File serverKeyFile) {
         this.auditLogger = auditLogger;
         this.accountManager = accountManager;
+        this.serverKeys = serverKeys;
+        this.serverKeyFile = serverKeyFile;
         setTitle("VaultLink Bank Server");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setSize(700, 500);
@@ -37,6 +41,8 @@ public class ServerGUI extends JFrame implements ClientHandler.ServerGUICallback
         connPanel.add(new JLabel("Active connections"), BorderLayout.NORTH);
         connPanel.add(connScroll, BorderLayout.CENTER);
 
+        JButton registerButton = new JButton("Register New Account");
+        registerButton.addActionListener(e -> showRegisterDialog());
         JButton viewAuditButton = new JButton("View Audit Log");
         viewAuditButton.addActionListener(e -> showAuditLog());
 
@@ -44,7 +50,10 @@ public class ServerGUI extends JFrame implements ClientHandler.ServerGUICallback
         top.add(logScroll, BorderLayout.CENTER);
         JPanel right = new JPanel(new BorderLayout());
         right.add(connPanel, BorderLayout.CENTER);
-        right.add(viewAuditButton, BorderLayout.SOUTH);
+        JPanel rightButtons = new JPanel(new GridLayout(2, 1, 0, 5));
+        rightButtons.add(registerButton);
+        rightButtons.add(viewAuditButton);
+        right.add(rightButtons, BorderLayout.SOUTH);
         add(top, BorderLayout.CENTER);
         add(right, BorderLayout.EAST);
     }
@@ -72,6 +81,58 @@ public class ServerGUI extends JFrame implements ClientHandler.ServerGUICallback
                 }
             }
         });
+    }
+
+    /**
+     * COE817: customers register username/password on the server; K_pre must match the ATM config file for that user.
+     */
+    private void showRegisterDialog() {
+        JTextField userField = new JTextField(16);
+        JPasswordField passField = new JPasswordField(16);
+        JTextField balanceField = new JTextField("0", 10);
+        JTextField kpreField = new JTextField(32);
+        JPanel panel = new JPanel(new GridLayout(0, 1, 5, 5));
+        panel.add(new JLabel("Username:"));
+        panel.add(userField);
+        panel.add(new JLabel("Password:"));
+        panel.add(passField);
+        panel.add(new JLabel("Initial balance:"));
+        panel.add(balanceField);
+        panel.add(new JLabel("K_pre (32 hex chars, same as ATM config k_pre):"));
+        panel.add(kpreField);
+        int ok = JOptionPane.showConfirmDialog(this, panel, "Register New Account", JOptionPane.OK_CANCEL_OPTION);
+        if (ok != JOptionPane.OK_OPTION) return;
+        String username = userField.getText().trim();
+        char[] password = passField.getPassword();
+        String kpre = kpreField.getText().trim();
+        if (username.isEmpty() || password.length == 0) {
+            JOptionPane.showMessageDialog(this, "Username and password are required.");
+            return;
+        }
+        if (kpre.length() != 32 || !kpre.matches("[0-9A-Fa-f]+")) {
+            JOptionPane.showMessageDialog(this, "K_pre must be exactly 32 hexadecimal characters.");
+            return;
+        }
+        double bal;
+        try {
+            bal = Double.parseDouble(balanceField.getText().trim());
+            if (bal < 0) throw new NumberFormatException();
+        } catch (NumberFormatException e) {
+            JOptionPane.showMessageDialog(this, "Invalid initial balance.");
+            return;
+        }
+        try {
+            accountManager.setPassword(username, password);
+            accountManager.ensureAccount(username, bal);
+            serverKeys.putKpreAndSave(username, kpre);
+            accountManager.saveToFile();
+            log("Registered user: " + username + " (K_pre saved to " + serverKeyFile.getPath() + ")");
+            JOptionPane.showMessageDialog(this, "Account registered. Create matching ATM config with k_pre=" + kpre);
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, "Registration failed: " + ex.getMessage());
+        } finally {
+            java.util.Arrays.fill(password, '\0');
+        }
     }
 
     private void showAuditLog() {

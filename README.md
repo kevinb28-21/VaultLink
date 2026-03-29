@@ -78,6 +78,16 @@ Optional arguments: `[configPath [host [port]]]`. Default host is `localhost`, d
 
 Each user has an initial balance of 1000.0 on first run (seeded by the server).
 
+### Registering new accounts (COE817)
+
+Customers register **on the bank server** with username and password (and a pre-shared **K_pre** for the authenticated key exchange):
+
+1. Start the server and click **Register New Account**.
+2. Enter username, password, initial balance, and **32 hex characters** for `k_pre` (must match the `k_pre` line in that customer’s ATM `*.properties` file).
+3. The server stores a PBKDF2 password hash, the balance, and persists `username=K_pre` to `src/config/server.properties`.
+
+Then create `src/config/atmN.properties` for that user with the same `k_pre` value and run the client with that config file.
+
 ## Protocol summary
 
 - **Key exchange:** ATM sends `{username, N_client}`; server replies with `{N_client, N_server, E(K_pre, session_token)}`; ATM sends `E(K_pre, N_server)`. Both compute **Master Secret** = HMAC-SHA256(K_pre, N_client ‖ N_server) and derive **K_enc** (AES-128) and **K_mac** (HMAC-SHA256).

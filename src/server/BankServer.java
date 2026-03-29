@@ -8,7 +8,6 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.util.Properties;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -23,11 +22,8 @@ public class BankServer {
     public static void main(String[] args) throws Exception {
         String configDir = "src/config";
         if (args.length > 0) configDir = args[0];
-        Properties serverKeys = new Properties();
         File keyFile = new File(configDir, "server.properties");
-        try (Reader r = new InputStreamReader(Files.newInputStream(keyFile.toPath()), StandardCharsets.UTF_8)) {
-            serverKeys.load(r);
-        }
+        ServerKeyStore serverKeys = new ServerKeyStore(keyFile);
         AccountManager accountManager = new AccountManager(ProtocolConstants.ACCOUNTS_FILENAME);
         accountManager.loadFromFile();
         accountManager.seedDefaultUsersIfNeeded();
@@ -39,7 +35,7 @@ public class BankServer {
         byte[] kMacLog = CryptoUtils.deriveKey(auditSecret, "audit_mac", (byte) 0x02);
         AuditLogger auditLogger = new AuditLogger(ProtocolConstants.AUDIT_LOG_FILENAME, kEncLog, kMacLog);
 
-        ServerGUI gui = new ServerGUI(auditLogger, accountManager);
+        ServerGUI gui = new ServerGUI(auditLogger, accountManager, serverKeys, keyFile);
         gui.setVisible(true);
 
         ExecutorService executor = Executors.newCachedThreadPool();

@@ -6,6 +6,19 @@
 
 ---
 
+## Group members (COE817 submission requirement)
+
+| Name | Student ID |
+|------|------------|
+| *(fill in)* | *(fill in)* |
+| *(fill in)* | *(fill in)* |
+| *(fill in)* | *(fill in)* |
+| *(fill in)* | *(fill in)* |
+
+*Replace the placeholders above with each group member’s legal name and student ID before submitting to D2L.*
+
+---
+
 ## 1. Introduction
 
 ### 1.1 Purpose
