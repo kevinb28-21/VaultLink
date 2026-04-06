@@ -3,10 +3,12 @@ package vaultlink.server;
 import javax.swing.*;
 import java.awt.*;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.List;
+import java.util.Properties;
 
 /**
  * Server GUI: scrollable log, active connections list, register new account, "View Audit Log" button.
@@ -48,13 +50,16 @@ public class ServerGUI extends JFrame implements ClientHandler.ServerGUICallback
         registerButton.addActionListener(e -> showRegisterDialog());
         JButton viewAuditButton = new JButton("View Audit Log");
         viewAuditButton.addActionListener(e -> showAuditLog());
+        JButton deleteAccountButton = new JButton("Delete Account");
+        deleteAccountButton.addActionListener(e -> showDeleteAccountDialog());
 
         JPanel top = new JPanel(new BorderLayout());
         top.add(logScroll, BorderLayout.CENTER);
         JPanel right = new JPanel(new BorderLayout());
         right.add(connPanel, BorderLayout.CENTER);
-        JPanel rightButtons = new JPanel(new GridLayout(2, 1, 0, 5));
+        JPanel rightButtons = new JPanel(new GridLayout(3, 1, 0, 5));
         rightButtons.add(registerButton);
+        rightButtons.add(deleteAccountButton);
         rightButtons.add(viewAuditButton);
         right.add(rightButtons, BorderLayout.SOUTH);
         add(top, BorderLayout.CENTER);
@@ -164,6 +169,64 @@ public class ServerGUI extends JFrame implements ClientHandler.ServerGUICallback
         }
         log("Wrote ATM config: " + atmFile.getPath());
         return atmFile;
+    }
+
+    private void showDeleteAccountDialog() {
+        JTextField userField = new JTextField(16);
+        JPanel panel = new JPanel(new GridLayout(0, 1, 5, 5));
+        panel.add(new JLabel("Username to delete:"));
+        panel.add(userField);
+        int ok = JOptionPane.showConfirmDialog(this, panel, "Delete Account", JOptionPane.OK_CANCEL_OPTION);
+        if (ok != JOptionPane.OK_OPTION) return;
+        String username = userField.getText().trim();
+        if (username.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Enter a username.");
+            return;
+        }
+        int confirm = JOptionPane.showConfirmDialog(this,
+                "Permanently delete account \"" + username + "\"?\n"
+                        + "Balance, password, and K_pre will be removed from disk.\n"
+                        + "Matching ATM config file(s) in the config folder will be deleted.",
+                "Confirm delete",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.WARNING_MESSAGE);
+        if (confirm != JOptionPane.YES_OPTION) return;
+        try {
+            boolean hadAccount = accountManager.removeAccount(username);
+            boolean hadKey = serverKeys.removeKpreAndSave(username);
+            if (!hadAccount && !hadKey) {
+                JOptionPane.showMessageDialog(this, "No account or key found for: " + username);
+                return;
+            }
+            accountManager.saveToFile();
+            removeAtmConfigFilesForUsername(username);
+            log("Deleted account: " + username);
+            JOptionPane.showMessageDialog(this, "Account deleted: " + username);
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, "Delete failed: " + ex.getMessage());
+        }
+    }
+
+    /** Remove atmN.properties whose username= property matches. */
+    private void removeAtmConfigFilesForUsername(String username) {
+        File configDir = serverKeyFile.getParentFile();
+        if (configDir == null || !configDir.isDirectory()) return;
+        File[] files = configDir.listFiles((dir, name) -> name.matches("atm\\d+\\.properties"));
+        if (files == null) return;
+        for (File f : files) {
+            try {
+                Properties p = new Properties();
+                try (FileInputStream fis = new FileInputStream(f)) {
+                    p.load(fis);
+                }
+                String u = p.getProperty("username");
+                if (u != null && username.equals(u.trim())) {
+                    Files.deleteIfExists(f.toPath());
+                    log("Removed ATM config: " + f.getPath());
+                }
+            } catch (Exception ignored) {
+            }
+        }
     }
 
     private void showAuditLog() {

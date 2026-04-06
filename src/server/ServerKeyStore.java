@@ -39,6 +39,14 @@ public final class ServerKeyStore {
         save();
     }
 
+    /** Remove K_pre for a username and persist. Returns true if an entry existed. */
+    public synchronized boolean removeKpreAndSave(String username) throws IOException {
+        if (username == null) return false;
+        if (keys.remove(username.trim()) == null) return false;
+        save();
+        return true;
+    }
+
     private void save() throws IOException {
         try (PrintWriter w = new PrintWriter(Files.newBufferedWriter(keyFile.toPath(), StandardCharsets.UTF_8))) {
             w.println("# Server mapping: username -> K_pre (32 hex chars = 16 bytes)");

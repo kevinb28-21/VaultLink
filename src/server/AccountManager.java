@@ -102,6 +102,14 @@ public final class AccountManager {
         }
     }
 
+    /** Remove balance and password hash for a user. Returns true if anything was removed. */
+    public synchronized boolean removeAccount(String username) {
+        if (username == null || (username = username.trim()).isEmpty()) return false;
+        boolean hadBalance = balances.remove(username) != null;
+        boolean hadPassword = passwordHashes.remove(username) != null;
+        return hadBalance || hadPassword;
+    }
+
     /** Seed user1, user2, user3 with default passwords if not already present (for demo). */
     public void seedDefaultUsersIfNeeded() throws Exception {
         String[] users = { "user1", "user2", "user3" };
