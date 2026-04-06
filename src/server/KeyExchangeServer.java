@@ -44,10 +44,16 @@ public class KeyExchangeServer {
      */
     public static boolean verifyMessage3(DataInputStream in, byte[] kPre, byte[] nServer) throws Exception {
         int len = in.readInt();
+        if (len <= 0 || len > 4096) throw new IOException("Invalid key-exchange proof length");
         byte[] encrypted = new byte[len];
         in.readFully(encrypted);
-        byte[] decrypted = CryptoUtils.aesDecrypt(kPre, encrypted);
-        return Arrays.equals(decrypted, nServer);
+        try {
+            byte[] decrypted = CryptoUtils.aesDecrypt(kPre, encrypted);
+            return Arrays.equals(decrypted, nServer);
+        } catch (Exception e) {
+            // Most often indicates wrong K_pre / client config mismatch.
+            return false;
+        }
     }
 
     /**

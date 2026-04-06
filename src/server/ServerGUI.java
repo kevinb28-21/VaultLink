@@ -3,6 +3,9 @@ package vaultlink.server;
 import javax.swing.*;
 import java.awt.*;
 import java.io.File;
+import java.io.PrintWriter;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.List;
 
 /**
@@ -127,12 +130,40 @@ public class ServerGUI extends JFrame implements ClientHandler.ServerGUICallback
             serverKeys.putKpreAndSave(username, kpre);
             accountManager.saveToFile();
             log("Registered user: " + username + " (K_pre saved to " + serverKeyFile.getPath() + ")");
-            JOptionPane.showMessageDialog(this, "Account registered. Create matching ATM config with k_pre=" + kpre);
+            File atmConfig = createAtmConfigFile(username, kpre);
+            String msg = "Account registered.\n"
+                    + "ATM config created: " + atmConfig.getPath() + "\n"
+                    + "Run client with: java -cp out vaultlink.client.ATMClient " + atmConfig.getPath();
+            JOptionPane.showMessageDialog(this, msg);
         } catch (Exception ex) {
             JOptionPane.showMessageDialog(this, "Registration failed: " + ex.getMessage());
         } finally {
             java.util.Arrays.fill(password, '\0');
         }
+    }
+
+    private File createAtmConfigFile(String username, String kpreHex) throws Exception {
+        File configDir = serverKeyFile.getParentFile();
+        if (configDir == null) configDir = new File(".");
+        if (!configDir.exists() && !configDir.mkdirs())
+            throw new IllegalStateException("Could not create config directory: " + configDir.getPath());
+
+        int n = 1;
+        File atmFile;
+        while (true) {
+            atmFile = new File(configDir, "atm" + n + ".properties");
+            if (!atmFile.exists()) break;
+            n++;
+            if (n > 9999) throw new IllegalStateException("Could not find free atmN.properties filename");
+        }
+
+        try (PrintWriter w = new PrintWriter(Files.newBufferedWriter(atmFile.toPath(), StandardCharsets.UTF_8))) {
+            w.println("# ATM Client " + n + " - Pre-shared key (K_pre)");
+            w.println("username=" + username);
+            w.println("k_pre=" + kpreHex);
+        }
+        log("Wrote ATM config: " + atmFile.getPath());
+        return atmFile;
     }
 
     private void showAuditLog() {

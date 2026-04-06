@@ -30,6 +30,7 @@ public class ATMClientGUI extends JFrame {
 
     private ATMClientSession session;
     private byte[] kPre;
+    private String configUsername;
 
     public ATMClientGUI(String configPath, String serverHost, int serverPort) {
         this.configPath = configPath;
@@ -109,6 +110,10 @@ public class ATMClientGUI extends JFrame {
         try (FileInputStream fis = new FileInputStream(configPath)) {
             p.load(fis);
         }
+        String u = p.getProperty("username");
+        if (u != null && !(u = u.trim()).isEmpty()) {
+            configUsername = u;
+        }
         String kPreStr = p.getProperty("k_pre");
         if (kPreStr == null || kPreStr.isEmpty()) throw new IllegalArgumentException("k_pre not found in config");
         kPre = MessageFormat.decodeKpre(kPreStr.trim());
@@ -127,6 +132,14 @@ public class ATMClientGUI extends JFrame {
         new Thread(() -> {
             try {
                 if (kPre == null) loadKpre();
+                if (configUsername != null && !configUsername.equals(user)) {
+                    final String msg = "Config is for " + configUsername + " (wrong ATM config for this username)";
+                    SwingUtilities.invokeLater(() -> {
+                        statusLabel.setText(msg);
+                        statusLabel.setForeground(Color.RED);
+                    });
+                    return;
+                }
                 ATMClientSession s = ATMClientSession.connect(serverHost, serverPort, user, pass, kPre);
                 if (s == null) {
                     SwingUtilities.invokeLater(() -> {

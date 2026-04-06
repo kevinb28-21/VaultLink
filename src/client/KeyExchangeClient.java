@@ -36,13 +36,20 @@ public class KeyExchangeClient {
         byte[] nServer = new byte[ProtocolConstants.IV_SIZE_BYTES];
         in.readFully(nServer);
         int encLen = in.readInt();
+        if (encLen <= 0 || encLen > 4096) throw new IOException("Invalid key-exchange token length");
         byte[] encryptedToken = new byte[encLen];
         in.readFully(encryptedToken);
         // Verify server echoed our nonce
         if (!java.util.Arrays.equals(nClientRecv, nClientSent))
             throw new SecurityException("Server did not echo N_client");
         // Decrypt session token (server proves knowledge of K_pre)
-        byte[] token = CryptoUtils.aesDecrypt(kPre, encryptedToken);
+        final byte[] token;
+        try {
+            token = CryptoUtils.aesDecrypt(kPre, encryptedToken);
+        } catch (Exception e) {
+            // Commonly seen as "Given final block not properly padded" when the wrong K_pre is used.
+            throw new SecurityException("Key exchange failed (wrong k_pre / wrong ATM config for this username)", e);
+        }
         if (!java.util.Arrays.equals(token, nServer))
             throw new SecurityException("Session token mismatch");
         return nServer;
