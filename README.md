@@ -1,10 +1,12 @@
 # VaultLink — Secure Banking System
 
-University security project: multi-threaded banking system with 1 bank server, 3 ATM clients, authenticated key exchange, symmetric encryption, MAC verification, and encrypted audit log.
+**Kevin Bhatt** and **Kulraj Bahia** — partners on this project.
+
+Kevin and Kulraj wrote this README for anyone grading or running it. **VaultLink** is the secure banking system we built for our university security course: one bank server, three ATM clients (you can add more), authenticated key exchange, AES + HMAC on the wire, and an encrypted audit log. We implemented the crypto with `javax.crypto` only—no TLS.
 
 ## Requirements
 
-- **Java 8+** (uses `javax.crypto`, Swing)
+- **Java 8+** (we use `javax.crypto` and Swing)
 
 ## Project layout
 
@@ -19,16 +21,16 @@ VaultLink/
 │   ├── common/               # Crypto, protocol constants, message format
 │   ├── server/               # Bank server, handlers, audit log, GUI
 │   └── client/               # ATM client, key exchange, GUI
-├── out/                      # Compiled classes (created on build)
-├── audit_log.bin             # Generated at runtime; sample may be included
-├── accounts.json             # Persisted accounts (created on first run)
+├── out/                      # Compiled classes (created when you build)
+├── audit_log.bin             # Written at runtime; we may ship a sample
+├── accounts.json             # Account data (created on first run)
 ├── README.md
-└── report.docx / report.pdf  # Written report
+└── report.docx / report.pdf  # Course report (if you export from report.md)
 ```
 
 ## Build
 
-From project root:
+From the project root:
 
 ```bash
 mkdir -p out
@@ -43,30 +45,30 @@ javac -d out -sourcepath src src/common/*.java src/server/*.java src/client/*.ja
 java -cp out vaultlink.server.BankServer
 ```
 
-Optional: pass config directory as first argument:
+If your working directory isn’t the repo root (e.g. running from an IDE), pass the config folder explicitly so we load `server.properties` correctly:
 
 ```bash
 java -cp out vaultlink.server.BankServer src/config
 ```
 
-The server GUI opens, listens on port **9000**, and shows the activity log and active connections. Use **View Audit Log** to decrypt and display the audit log.
+When it starts, you should see the server GUI, listening on **9000**, with a log and active connections. **View Audit Log** decrypts and shows `audit_log.bin`.
 
-**2. Start ATM clients**
+**2. Start the ATM clients**
 
-Run up to three clients (e.g. three terminals), each with the matching config:
+We normally use three terminals, one per ATM, each pointing at the matching config:
 
 ```bash
-# ATM 1 — use user1 / password1
+# ATM 1 — user1 / password1
 java -cp out vaultlink.client.ATMClient src/config/atm1.properties
 
-# ATM 2 — use user2 / password2
+# ATM 2 — user2 / password2
 java -cp out vaultlink.client.ATMClient src/config/atm2.properties
 
-# ATM 3 — use user3 / password3
+# ATM 3 — user3 / password3
 java -cp out vaultlink.client.ATMClient src/config/atm3.properties
 ```
 
-Optional arguments: `[configPath [host [port]]]`. Default host is `localhost`, default port is `9000`.
+Optional: `[configPath [host [port]]]`. Defaults: host `localhost`, port `9000`.
 
 **Demo credentials**
 
@@ -76,36 +78,37 @@ Optional arguments: `[configPath [host [port]]]`. Default host is `localhost`, d
 | user2    | password2  | atm2.properties  |
 | user3    | password3  | atm3.properties  |
 
-Each user has an initial balance of 1000.0 on first run (seeded by the server).
+On first run the server seeds those three users with balance **1000.0** if they aren’t already in `accounts.json`.
 
 ### Registering new accounts (COE817)
 
-Customers register **on the bank server** with username and password (and a pre-shared **K_pre** for the authenticated key exchange):
+We register customers **on the bank server** (username, password, starting balance, and a pre-shared **K_pre** for key exchange):
 
 1. Start the server and click **Register New Account**.
-2. Enter username, password, initial balance, and **32 hex characters** for `k_pre` (must match the `k_pre` line in that customer’s ATM `*.properties` file).
-3. The server stores a PBKDF2 password hash, the balance, and persists `username=K_pre` to `src/config/server.properties`.
+2. Enter username, password, initial balance, and **32 hex characters** for `k_pre` (we generate one with `openssl rand -hex 16` when we need a fresh key).
+3. We store a PBKDF2 hash of the password, the balance, and write `username=K_pre` to `src/config/server.properties`.
+4. The server also creates the next free **`atmN.properties`** in that config folder with `username=` and `k_pre=` so you can run the client with the path it shows in the confirmation dialog.
 
-Then create `src/config/atmN.properties` for that user with the same `k_pre` value and run the client with that config file.
+You can still hand-edit configs if you want; the important part is that **`k_pre` in the ATM file matches what we stored for that username on the server.**
 
-## Protocol summary
+## Protocol summary (what we implemented)
 
-- **Key exchange:** ATM sends `{username, N_client}`; server replies with `{N_client, N_server, E(K_pre, session_token)}`; ATM sends `E(K_pre, N_server)`. Both compute **Master Secret** = HMAC-SHA256(K_pre, N_client ‖ N_server) and derive **K_enc** (AES-128) and **K_mac** (HMAC-SHA256).
-- **Login:** After key exchange, client sends encrypted `LOGIN|username|password`; server verifies PBKDF2 hash and responds `LOGIN_OK` or `LOGIN_FAIL`.
-- **Transactions:** Each request/response is **IV + AES-CBC(K_enc, plaintext) + HMAC-SHA256(K_mac, IV ‖ ciphertext)** (encrypt-then-MAC). Plaintext includes customer_id, action, amount, timestamp, nonce.
-- **Audit log:** Each entry is stored as **IV + AES-CBC(entry) + HMAC** in `audit_log.bin`; the server uses a fixed key so the admin can decrypt and view the log.
+- **Key exchange:** ATM sends `{username, N_client}`; server replies `{N_client, N_server, E(K_pre, session_token)}`; ATM sends `E(K_pre, N_server)`. Both sides compute **Master Secret** = HMAC-SHA256(K_pre, N_client ‖ N_server) and derive **K_enc** (AES-128) and **K_mac** (HMAC-SHA256).
+- **Login:** After key exchange, the client sends encrypted `LOGIN|username|password`; we verify the PBKDF2 hash and answer `LOGIN_OK` or `LOGIN_FAIL`.
+- **Transactions:** Each message is **IV + AES-CBC(K_enc, plaintext) + HMAC-SHA256(K_mac, IV ‖ ciphertext)** (encrypt-then-MAC). Plaintext includes customer_id, action, amount, timestamp, nonce.
+- **Audit log:** Each line in `audit_log.bin` is **IV + ciphertext + HMAC**; we used a fixed server-derived key so the admin GUI can decrypt the log for demos.
 
 ## Design choices
 
-- **AES-128-CBC** with random IV per message.
-- **HMAC-SHA256** for integrity; **encrypt-then-MAC** for transaction and audit messages.
-- **PBKDF2** with salt for password hashing; passwords are never stored in plaintext.
-- No TLS: all crypto is implemented with `javax.crypto` (and standard APIs) only.
+- **AES-128-CBC** with a random IV per message.
+- **HMAC-SHA256** and **encrypt-then-MAC** on transactions and audit entries.
+- **PBKDF2** with salt for passwords—we never store plaintext passwords.
+- No TLS on purpose: everything goes through the primitives above.
 
 ## Report
 
-The full written report is in **report.md**. To produce report.docx: open report.md in Microsoft Word and Save As Word format; set font to Times New Roman 12pt. With pandoc: `pandoc report.md -o report.docx`.
+We wrote the full report in **report.md**. For a Word hand-in: open it in Word, set Times New Roman 12pt, save as `.docx`. Or: `pandoc report.md -o report.docx`.
 
 ## License
 
-Course project — use as specified by your institution.
+Course project — use only as our institution allows.
